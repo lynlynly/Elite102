@@ -1,0 +1,99 @@
+from flask import Blueprint, render_template, request, flash, redirect, url_for
+from .models import CustomerInfo, AccountInfo
+from . import db
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import login_user, login_required, logout_user, current_user
+
+auth = Blueprint('auth', __name__)
+
+#routes to login through the login function
+@auth.route('/login', methods = ['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+
+        user = CustomerInfo.query.filter_by(email=email).first()
+        if user:
+            if check_password_hash(user.password, password):
+                flash('Logged in sucessfully!', category = 'success')
+                login_user(user, remember=True)
+                return redirect(url_for('views.home'))
+            else:
+                flash('Incorrect Password, Try again.', category = 'error')
+        
+        else:
+            flash('Email does not exist', category = "error")
+    return render_template("login.html", user = current_user)
+
+@auth.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('auth.login'))
+
+@auth.route('/delete-account')
+@login_required
+def delete_account():
+    return render_template('delete_account.html', user = current_user)
+
+@auth.route('/confirm-delete', methods=['POST'])
+@login_required
+def confirm_delete():
+    email = request.form.get('email')
+    password = request.form.get('password')
+    user = CustomerInfo.query.filter_by(email=email).first()
+    if not user or not user.check_password(password):
+        flash('Email or Password not valid')
+        return redirect(url_for('delete_account'))
+    
+    db.session.delete(user)
+    db.session.commit()
+    logout_user()
+    flash('Account was deleted sucessfully')
+    return redirect(url_for('auth.sign_up'))
+
+
+@auth.route('/sign-up',methods = ['GET', 'POST'])
+def sign_up():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        first_name = request.form.get('firstName')
+        last_name = request.form.get('lastName')
+        street_address = request.form.get('streetAddress')
+        city = request.form.get('city')
+        state = request.form.get('state')
+        telephone = request.form.get('telephone')
+        password1 = request.form.get('password1')
+        password2 = request.form.get('password2')
+        birthday = request.form.get('birthday')
+        user = CustomerInfo.query.filter_by(email=email).first()
+
+        if user:
+            flash('Email already exists. ', category = 'error')
+
+        if len(email) < 4:
+            flash('email must be greater than 3 characters.', category = 'error')
+        elif len(first_name) < 2:
+             flash('First name must be greater than 1 character.', category = 'error')
+        elif len(last_name) < 2:
+            flash('Last name must be greater than 1 character', category = 'error')
+        elif password1 != password2:
+             flash('Passwords do not match.', category = 'error')
+        elif len(password1) < 7:
+             flash('Password must be at least 7 characters.', category = 'error')
+        else: 
+             new_user = CustomerInfo(email = email, first_name = first_name, last_name = last_name, 
+                                     password = generate_password_hash(password1, method= 'sha256'), street_address = street_address,
+                                     city = city, state = state, telephone = telephone, birthday = birthday
+                                     )
+             db.session.add(new_user)
+             db.session.commit()
+             login_user(new_user, remember=True)
+             flash('Account created!', category = 'sucess')
+             return redirect(url_for('views.home'))
+
+    return render_template("sign_up.html", user = current_user)
+
+
+
